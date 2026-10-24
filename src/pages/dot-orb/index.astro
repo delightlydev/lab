@@ -1,0 +1,138 @@
+---
+import LabLayout from "../../layouts/LabLayout.astro";
+
+const file = `${import.meta.env.BASE_URL}dot-orb/dot-orb-page.js`;
+
+const states = ["sphere", "swell", "sweep", "scan", "trace", "rings", "lobes", "check", "shake"];
+---
+
+<LabLayout title="Dot orb" description="A ball of dots that reshapes itself for each state: sphere, swell, sweep, scan, trace, rings, lobes, check and shake.">
+  <script is:inline type="module" src={file}></script>
+
+  <main class="dorb">
+    <section class="dorb-stage">
+      <div class="dorb-hero">
+        <button type="button" id="dorb-hit" class="dorb-hit" aria-label="Pause or resume the loop" aria-pressed="false">
+          <span id="dorb-hero" class="dorb-orb" data-n="900" data-size="320"></span>
+        </button>
+        <p id="dorb-name" class="dorb-name" aria-live="polite">sphere</p>
+      </div>
+      <div class="dorb-picker" role="group" aria-label="State">
+        {
+          states.map((s) => (
+            <button type="button" data-state={s} aria-pressed="false">
+              <span class="dorb-orb" data-n="90" data-size="40" />
+              <span class="dorb-cap">{s}</span>
+            </button>
+          ))
+        }
+      </div>
+    </section>
+  </main>
+</LabLayout>
+
+<style is:global>
+  .dorb {
+    --dorb-fg: var(--lab-fg);
+    --dorb-mute: var(--lab-muted);
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 28px 16px 76px;
+  }
+  .dorb-stage {
+    width: min(720px, 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .dorb-picker button:focus-visible,
+  .dorb-hit:focus-visible {
+    outline: 2px solid var(--dorb-fg);
+    outline-offset: 3px;
+    border-radius: 8px;
+  }
+  .dorb-hero {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .dorb-hit {
+    display: block;
+    width: 100%;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    line-height: 0;
+  }
+  .dorb-orb {
+    display: inline-flex;
+    line-height: 0;
+  }
+  .dorb-hit .dorb-orb {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+  .dorb-name {
+    margin: 0;
+    height: 28px;
+    font-size: 17px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    text-transform: capitalize;
+    color: var(--dorb-fg);
+  }
+  .dorb-pop {
+    animation: dorb-in 0.4s ease both;
+  }
+  @keyframes dorb-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  .dorb-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(68px, 1fr));
+    gap: 8px 4px;
+    width: 100%;
+    border-top: 1px solid var(--lab-line);
+    padding-top: 12px;
+  }
+  .dorb-picker button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    font: inherit;
+    font-size: 12px;
+    color: var(--dorb-mute);
+    background: none;
+    border: 0;
+    padding: 4px 0;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+  .dorb-picker button[aria-pressed="true"] {
+    color: var(--dorb-fg);
+  }
+  .dorb-cap {
+    text-transform: capitalize;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dorb-picker button {
+      transition: none;
+    }
+    .dorb-pop {
+      animation: none;
+    }
+  }
+</style>

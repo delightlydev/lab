@@ -11,4 +11,9 @@ export const projects: Project[] = [
     title: "Status thread",
     description: "One thread that reshapes itself for every state: idle, listening, thinking, working, done, failed.",
   },
+  {
+    slug: "dot-orb",
+    title: "Dot orb",
+    description: "A ball of dots that reshapes itself for each state: sphere, swell, sweep, scan, trace, rings, lobes, check, shake.",
+  },
 ];
