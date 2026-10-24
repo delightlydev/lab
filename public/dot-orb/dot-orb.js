@@ -9,8 +9,8 @@
 //   sweep    a faint ball with one bright arc circling it
 //   halftone a square grid of dots, cut to a disc, where soft blobs of larger
 //            dots drift and merge
-//   converge a ball that draws in around a voice, like listening: it shrinks and
-//            brightens as a person speaks, and relaxes in the pauses
+//   converge a flat round disc, the ripple turned inside out: each word is a ring
+//            that closes in from the rim and lands softly at the centre, like listening
 //   ripple   a still surface where each word lands as a water drop and ripples spread outward, like speaking
 //   check    a faint circle with a thin check drawn inside
 //   shake    a ball that shakes once as it arrives
@@ -54,35 +54,15 @@ const hash = (i) => {
   return s - Math.floor(s);
 };
 
-// How loud a made-up talker is at time t, from 0 to 1: a run of words, each a
-// soft swell, with gaps and clusters so the rhythm is never even. who is 0 for a
-// person being listened to (slower, more uneven) and 1 for the assistant
-// speaking (steadier, more fluent). A real app would pass in the microphone or
-// speaker level here instead.
-const wordsMemo = new Map();
-function words(t, who) {
-  const key = who + ":" + t;
-  let v = wordsMemo.get(key);
-  if (v !== undefined) return v;
-  const gap = who ? 0.62 : 0.78; // seconds between words
-  const first = Math.floor(t / gap);
-  let sum = 0;
-  for (let e = Math.max(0, first - 6); e <= first + 4; e++) {
-    const start = gap * (e + 1.6 * Math.sin(0.52 * e + 1 + who) + 0.8 * Math.sin(0.17 * e + who * 2)) + (hash(e * 3 + who) - 0.5) * gap * 0.4;
-    const u = (t - start) / ((who ? 0.55 : 0.7) + 0.35 * hash(e * 5 + who + 1));
-    if (u > 0 && u < 1) sum += (0.45 + 0.55 * hash(e * 7 + who + 2)) * Math.pow(Math.sin(Math.PI * u), 2);
-  }
-  v = Math.min(1, sum);
-  if (wordsMemo.size > 480) wordsMemo.clear();
-  wordsMemo.set(key, v);
-  return v;
-}
-
-// The same, smoothed over a few tenths of a second, so a word comes up and dies
-// away softly. That is what a person sees in a good voice meter, and it keeps
-// the picture from flickering.
-export function voice(t, who) {
-  return (words(t, who) + words(t - 0.1, who) + words(t - 0.2, who) + words(t - 0.3, who) + words(t - 0.4, who)) / 5;
+// Words arriving, for the listening state: when each reaches the rim, from which
+// side, how strongly and how fast it closes in. Words come at irregular moments,
+// in phrases and with longer pauses between them. A real app would raise one of
+// these for each stretch of speech it hears from the person.
+const WORD_LIFE = 3.2;
+function wordAt(e) {
+  const g = 0.95;
+  const time = g * (e + 1.7 * Math.sin(0.5 * e + 1) + 0.9 * Math.sin(0.17 * e + 2) + 1.1 * Math.sin(0.31 * e + 0.7) * Math.sin(0.11 * e + 4)) + (hash(e * 3 + 7) - 0.5) * g * 0.6;
+  return { time, from: hash(e * 5 + 8) * TAU, str: 0.45 + 0.55 * hash(e * 7 + 9) * (hash(e * 13 + 4) < 0.2 ? 1 : 0.75), speed: 0.5 + 0.3 * hash(e * 11 + 10), width: 0.055 + 0.03 * hash(e * 17 + 11) };
 }
 
 // Water drops for the speaking state: when each lands and where. Drops come at
@@ -97,7 +77,6 @@ function dropAt(e) {
   const cz = Math.cos(el);
   return { time, x: Math.sin(az) * cz, y: Math.sin(el), z: Math.cos(az) * cz, str: 0.55 + 0.45 * hash(e * 11 + 4), speed: 0.7 + 0.3 * hash(e * 13 + 5) };
 }
-
 
 class Orb {
   constructor(host, state) {
@@ -141,6 +120,37 @@ class Orb {
         this.sph[idx * 3 + 2] = Math.sin(lon) * r;
         this.rad[idx] = Math.hypot(this.sph[idx * 3], ys[b]);
       }
+    }
+
+    // Concentric rings of dots, spaced the same along a ring as between rings,
+    // for the converge state: a flat round disc. As many rings as the dot count
+    // allows; any dots left over are hidden.
+    const ringsFor = (r) => {
+      let c = 0;
+      for (let k = 0; k < r; k++) c += Math.max(6, Math.round(TAU * (k + 0.5)));
+      return c;
+    };
+    let nr = 3;
+    while (ringsFor(nr + 1) <= n) nr++;
+    this.pnr = nr;
+    this.pr = new Float32Array(n);
+    this.pth = new Float32Array(n);
+    this.pk = new Int16Array(n);
+    this.pOn = new Uint8Array(n);
+    let pi = 0;
+    for (let k = 0; k < nr; k++) {
+      const m = Math.max(6, Math.round(TAU * (k + 0.5)));
+      for (let j = 0; j < m; j++, pi++) {
+        this.pr[pi] = (k + 0.5) / nr;
+        this.pth[pi] = ((j + 0.5 * (k % 2)) / m) * TAU + k * 0.7;
+        this.pk[pi] = k;
+        this.pOn[pi] = 1;
+      }
+    }
+    for (; pi < n; pi++) {
+      this.pr[pi] = this.pr[pi - 1];
+      this.pth[pi] = this.pth[pi - 1];
+      this.pk[pi] = this.pk[pi - 1];
     }
 
     // A square grid cut to a disc, one cell per dot, for the halftone state. The
@@ -327,17 +337,75 @@ class Orb {
           o[4] = 0.45 + 0.55 * gl;
           break;
         }
-        // Listening: the ball waits calm and a little dim, and draws in and
-        // brightens as the person speaks, taking the sound in. Each band of
-        // latitude carries a different share of the sound, like a spectrum
-        // wrapped round the ball, so the surface never moves as one piece.
-        const who = 0;
-        const band = Math.min(this.rows - 1, Math.floor((sy * 0.5 + 0.5) * this.rows));
-        const heard = voice(t - 0.12 * hash(band * 5 + who * 3), who);
-        const share = Math.pow(0.5 + 0.5 * Math.sin(band * 1.25 + 1.4 * Math.sin(t * 0.37) + t * 0.6), 1.5);
-        const loud = heard * (0.25 + 0.75 * share);
-        const rough = Math.sin(2.1 * sx + 1.1 * t) * Math.sin(1.9 * sy - 0.9 * t + 1) * Math.sin(2.3 * sz + 0.7 * t);
-        ball(0.14, 0.86 * (1 - 0.26 * loud + 0.04 * heard * rough), 0.92 + 0.35 * loud, 0.58 + 0.34 * loud);
+        // Listening, on a flat round disc: the ripple turned inside out. Each
+        // word the person says is a ring that gathers at the rim, then is drawn
+        // in: it starts slowly and quickens as it closes on the centre, narrowing
+        // and brightening as it focuses, and leaves a faint wake behind it. It
+        // lands as a soft pulse, with a small rebound that eases back out, and
+        // the disc settles. Words overlap and cross, as the drops do. Nothing is
+        // regular: each ring comes from its own side, so it is brighter there,
+        // has its own pace, width and strength, and its front is a little out of
+        // round; the gaps between words are uneven; and between words the disc
+        // is never dead, it breathes very slowly.
+        const rho = this.pr[i];
+        const th = this.pth[i] + (this.pk[i] % 2 ? 1 : -1) * 0.01 * t; // alternate rings drift a hair, opposite ways
+        const first = Math.floor(t / 0.95);
+        const soft = (lo, hi, v) => {
+          const x = Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
+          return x * x * (3 - 2 * x);
+        };
+        let lit = 0.05 + 0.04 * Math.sin(0.5 * t - rho * 3 + th * 0.5); // the slow resting breath, a ripple of its own
+        let push = 0; // how far the ring is drawing dots inward here
+        for (let e = Math.max(0, first - 8); e <= first + 3; e++) {
+          const w = wordAt(e);
+          const age = t - w.time;
+          if (age < 0 || age > WORD_LIFE) continue;
+          const reach = 1.25 / w.speed; // seconds for the ring to be drawn all the way in
+          const fade = 1 - Math.pow(age / WORD_LIFE, 4);
+          const d = Math.atan2(Math.sin(th - w.from), Math.cos(th - w.from)); // angle away from the side it came from
+          const side = 0.3 + 0.7 * Math.exp(-(d * d) / 2.2); // brighter on the side it came from, a wide arc
+          if (age < reach) {
+            const u = age / reach; // how far through its journey
+            const drawn = u * u * (1.55 - 0.55 * u); // slow to start, quickening: being drawn in
+            const front = 1.04 * (1 - drawn) + 0.04 * Math.sin(3 * th + e * 1.7 + 0.8 * age); // radius of the ring, a little out of round
+            const f = Math.min(1, Math.max(0, front));
+            const gather = soft(0, 0.22, u); // it builds at the rim, it does not just appear
+            const sharp = w.width * (0.55 + 0.75 * f) + 0.015; // narrower as it focuses
+            const dr = rho - front;
+            const body = Math.exp(-Math.pow(dr / sharp, 2)); // the ring itself, sharp
+            const wake = dr > 0 ? 0.32 * Math.exp(-dr / 0.16) * Math.exp(-Math.pow(dr / 0.5, 2)) : 0; // a faint trail left behind, outside it
+            const near = 0.25 + 0.95 * (1 - f); // faint at the rim, brightening as it closes in
+            lit += w.str * fade * gather * (body + wake) * side * near;
+            push += w.str * fade * gather * body;
+          } else {
+            // It has arrived. The centre takes it in and glows, and a small
+            // rebound eases back out, damped, like something that has landed.
+            const since = age - reach;
+            const land = soft(0, 0.12, since); // the glow swells in over a moment, not instantly
+            const glow = Math.exp(-since / 0.6) * Math.exp(-rho * rho / 0.03) * 0.8 * land;
+            const echoR = 0.26 * (1 - Math.exp(-since / 0.45)); // the rebound spreads and slows
+            const echo = 0.3 * Math.exp(-since / 0.55) * soft(0.05, 0.25, since) * Math.exp(-Math.pow((rho - echoR) / 0.07, 2));
+            lit += w.str * fade * (glow + echo);
+          }
+        }
+        lit = Math.min(1, lit);
+        // The dots lean inward a touch under the ring: they are being drawn in.
+        const pull = 1 - 0.05 * Math.min(1, push);
+        // As in halftone, fade toward the rim so the edge reads as a circle.
+        const edge = Math.min(1, Math.max(0, (rho - 0.74) / 0.28));
+        const rim = edge * edge * (3 - 2 * edge);
+        // A dot never grows past a share of the gap to its neighbours, so the
+        // tight rings at the centre keep clear space between them.
+        const half = (this.size / 2) * 0.97;
+        const spacing = (half * 0.96) / this.pnr; // pixels between rings
+        const baseCss = Math.max(0.9, this.size * 0.0042 + 0.5);
+        const roomy = (0.36 * spacing) / (baseCss * 1.06);
+        const want = (0.9 + 1.0 * Math.pow(lit, 1.0)) * (1 - 0.6 * rim) * (0.94 + 0.12 * hash(i + 71));
+        o[0] = Math.cos(th) * rho * pull * 0.96;
+        o[1] = Math.sin(th) * rho * pull * 0.96;
+        o[2] = 0.7;
+        o[3] = this.pOn[i] ? Math.min(want, Math.max(0.45, roomy)) : 0;
+        o[4] = this.pOn[i] ? (0.55 + 0.45 * lit) * (1 - 0.55 * rim) : 0;
         break;
       }
       case "check": {
