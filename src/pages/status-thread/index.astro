@@ -1,0 +1,659 @@
+---
+import LabLayout from "../../layouts/LabLayout.astro";
+
+const file = `${import.meta.env.BASE_URL}status-thread/status-thread.js`;
+
+const states = ["idle", "voice", "thinking", "working", "done", "failed"];
+const tabs = [
+  { id: "states", label: "States" },
+  { id: "chat", label: "Chat" },
+  { id: "voice", label: "Voice" },
+  { id: "everywhere", label: "Everywhere" },
+];
+const rows = ["api", "web", "admin", "worker"];
+---
+
+<LabLayout
+  title="Status thread"
+  description="A thread that changes shape for each state: ring, wave, arc, check, cross. Shown in a chat, a voice assistant and everywhere else."
+>
+  <script is:inline type="module" src={file}></script>
+
+  <div class="sm">
+    <header class="bar">
+      <div class="tabs" role="tablist" aria-label="Views">
+        {
+          tabs.map((t, i) => (
+            <button type="button" role="tab" id={`tab-${t.id}`} data-tab={t.id} aria-controls={`panel-${t.id}`} aria-selected={i === 0} tabindex={i === 0 ? 0 : -1}>
+              {t.label}
+            </button>
+          ))
+        }
+      </div>
+    </header>
+
+    <!-- 1. States -->
+    <section class="panel" id="panel-states" role="tabpanel" aria-labelledby="tab-states">
+      <div class="hero">
+        <button type="button" id="big-hit" class="big" aria-label="Pause or resume the loop"><lab-mark id="big" state="idle" size="320" label=""></lab-mark></button>
+        <p id="big-name" class="name" aria-live="polite">idle</p>
+      </div>
+      <div class="picker" role="group" aria-label="State">
+        {
+          states.map((s, i) => (
+            <button type="button" data-state={s} aria-label={s} title={s} aria-pressed={i === 0}>
+              <lab-mark state={s} size="34" label=""></lab-mark>
+            </button>
+          ))
+        }
+      </div>
+    </section>
+
+    <!-- 2. Chat -->
+    <section class="panel" id="panel-chat" role="tabpanel" aria-labelledby="tab-chat" hidden>
+      <div class="phone-box" id="phone-box">
+        <div class="phone">
+          <div class="screen">
+            <header class="appbar" aria-hidden="true">
+              <span class="icon"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h16M4 16h10"></path></svg></span>
+              <span class="title">Delightly <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></span>
+              <span class="icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.4 2.6a1.9 1.9 0 0 1 3 3l-9 9-3.4 1 1-3.4z"></path></svg></span>
+            </header>
+
+            <div class="thread" id="thread"></div>
+
+            <div class="dock">
+              <div class="composer">
+                <span class="plus" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>
+                <div class="field" id="field"><span id="field-text"></span><span class="ph">Ask anything</span></div>
+                <span class="mic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></span>
+                <button type="button" class="go" id="send" data-mode="idle" aria-label="Play the next message">
+                  <svg class="wave" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 10v4M9 7v10M13 4v16M17 8v8M21 11v2"></path></svg>
+                  <lab-mark class="load" state="working" size="24" label=""></lab-mark>
+                  <svg class="arrow" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Voice -->
+    <section class="panel" id="panel-voice" role="tabpanel" aria-labelledby="tab-voice" hidden>
+      <button type="button" class="orb" id="orb" aria-label="Play the next request">
+        <lab-mark id="orb-mark" state="idle" size="360" label=""></lab-mark>
+      </button>
+      <p class="caption" id="caption" aria-live="polite">Tap to talk</p>
+      <p class="heard" id="heard"></p>
+    </section>
+
+    <!-- 4. Everywhere -->
+    <section class="panel" id="panel-everywhere" role="tabpanel" aria-labelledby="tab-everywhere" hidden>
+      <div class="board">
+        <div class="tile">
+          <div class="toast" data-cycle="working,done" data-texts="Saving changes…|Saved" data-offset="0">
+            <lab-mark state="working" size="28" label=""></lab-mark><span data-text>Saving changes…</span>
+          </div>
+          <div class="toast" data-cycle="thinking,working,failed" data-texts="Thinking…|Uploading…|Upload failed" data-offset="900">
+            <lab-mark state="thinking" size="28" label=""></lab-mark><span data-text>Thinking…</span>
+          </div>
+          <div class="toast" data-cycle="working,done,idle" data-texts="Syncing…|Synced|Up to date" data-offset="1700">
+            <lab-mark state="working" size="28" label=""></lab-mark><span data-text>Syncing…</span>
+          </div>
+        </div>
+
+        <div class="tile center">
+          <div class="pillbtn" data-cycle="idle,working,done" data-texts="Generate|Generating…|Done" data-offset="300">
+            <lab-mark state="idle" size="30" label=""></lab-mark><span data-text>Generate</span>
+          </div>
+        </div>
+
+        <div class="tile">
+          <ul class="table">
+            {
+              rows.map((r, i) => (
+                <li data-cycle="idle,thinking,working,done,failed,done" data-offset={String(i * 650)}>
+                  <lab-mark state="idle" size="26" label=""></lab-mark><span>{r}</span>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+
+        <div class="tile center">
+          <div class="tabstrip">
+            <div class="browser" data-cycle="working,done,working,failed" data-offset="200">
+              <div class="fav"><lab-mark state="working" size="18" label=""></lab-mark></div>
+              <span>Delightly</span>
+            </div>
+            <div class="browser dim"><span>Docs</span></div>
+            <div class="browser dim"><span>Inbox</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</LabLayout>
+
+<script>
+  type Panel = "states" | "chat" | "voice" | "everywhere";
+  const STATES = ["idle", "voice", "thinking", "working", "done", "failed"];
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+  const $ = <T extends Element>(sel: string, root: ParentNode = document) => root.querySelector(sel) as T;
+  const $$ = <T extends Element>(sel: string, root: ParentNode = document) => [...root.querySelectorAll(sel)] as T[];
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+
+  // ---------------------------------------------------------------- 1. States
+  const big = $("#big");
+  const bigName = $("#big-name");
+  const picks = $$<HTMLButtonElement>(".picker [data-state]");
+  const HOLD: Record<string, number> = { idle: 2200, voice: 3800, thinking: 2400, working: 3400, done: 2400, failed: 2400 };
+  let index = 0;
+  let pausedUntil = 0;
+  let statesTimer = 0;
+  let autoplay = true;
+
+  function fitBig() {
+    const size = Math.round(Math.min(Math.max(Math.min(innerWidth, innerHeight) * 0.4, 160), 420));
+    big.setAttribute("size", String(size));
+  }
+
+  function show(state: string) {
+    index = STATES.indexOf(state);
+    big.setAttribute("state", state);
+    bigName.textContent = state;
+    picks.forEach((p) => p.setAttribute("aria-pressed", String(p.dataset.state === state)));
+  }
+
+  function loopStates() {
+    clearTimeout(statesTimer);
+    const state = STATES[index];
+    statesTimer = window.setTimeout(() => {
+      if (autoplay && Date.now() > pausedUntil) show(STATES[(index + 1) % STATES.length]);
+      loopStates();
+    }, HOLD[state]);
+  }
+
+  picks.forEach((p) =>
+    p.addEventListener("click", () => {
+      show(p.dataset.state!);
+      pausedUntil = Date.now() + 7000;
+      loopStates();
+    }),
+  );
+  $("#big-hit").addEventListener("click", () => {
+    autoplay = !autoplay;
+    $(".hero").classList.toggle("paused", !autoplay);
+  });
+  // The voice tab's mark is the whole interface, so it takes most of the screen.
+  function fitOrb() {
+    const size = Math.round(Math.min(Math.max(Math.min(innerWidth * 0.8, innerHeight * 0.5), 200), 560));
+    $("#orb-mark").setAttribute("size", String(size));
+  }
+  addEventListener("resize", () => (fitBig(), fitOrb()));
+  fitBig();
+  fitOrb();
+
+  // ------------------------------------------------------------------ 2. Chat
+  const phoneBox = $<HTMLElement>("#phone-box");
+  const thread = $<HTMLElement>("#thread");
+  const field = $<HTMLElement>("#field");
+  const fieldText = $<HTMLElement>("#field-text");
+  const send = $<HTMLButtonElement>("#send");
+  let chatRun = 0;
+  let chatNext = 0;
+
+  class Cancelled extends Error {}
+
+  // Scale the whole phone to fit the window; its insides are drawn at 390 x 844.
+  function fitPhone() {
+    const room = innerHeight - 150;
+    const wide = innerWidth - 32;
+    const scale = Math.max(0.45, Math.min(room / 868, wide / 414, 1.2));
+    phoneBox.style.setProperty("--ps", scale.toFixed(3));
+  }
+  addEventListener("resize", fitPhone);
+  fitPhone();
+
+  const toBottom = () => thread.scrollTo({ top: thread.scrollHeight, behavior: reduced.matches ? "auto" : "smooth" });
+
+  // The composer's round button: a mic that listens, a send arrow, a stop while busy.
+  function composer(mode: "idle" | "voice" | "send" | "busy") {
+    send.dataset.mode = mode;
+  }
+
+  // Everything a scene waits on goes through nap(), so leaving the tab stops it.
+  const napFor = (run: number) => async (ms: number) => {
+    await sleep(ms);
+    if (run !== chatRun) throw new Cancelled();
+  };
+
+  // The whole line is laid out up front with every word unseen, then the words
+  // fade in one by one. Nothing reflows, so the text never jumps or re-centres.
+  async function typeWords(el: HTMLElement, text: string, nap: (ms: number) => Promise<void>, pace: [number, number], follow = false) {
+    // follow: add each word as it arrives, so a caret after the text moves with it.
+    const words = text.split(/(?<=\s)/).map((word) => {
+      const span = document.createElement("span");
+      span.className = follow ? "soft" : "unseen";
+      span.textContent = word;
+      return span;
+    });
+    if (!follow) words.forEach((span) => el.append(span));
+    toBottom();
+    for (const span of words) {
+      if (follow) el.append(span);
+      span.className = "soft";
+      await nap(reduced.matches ? 0 : pace[0] + Math.random() * pace[1]);
+    }
+  }
+
+  // The user speaks: the ring listens, words appear in the composer, then it sends.
+  async function ask(text: string, nap: (ms: number) => Promise<void>) {
+    composer("voice");
+    field.classList.add("typing");
+    await nap(700);
+    await typeWords(fieldText, text, nap, [90, 100], true);
+    field.classList.remove("typing");
+    composer("send");
+    await nap(650);
+
+    fieldText.textContent = "";
+    composer("busy");
+    const bubble = document.createElement("div");
+    bubble.className = "msg-user";
+    bubble.textContent = text;
+    thread.append(bubble);
+    toBottom();
+    await nap(450);
+  }
+
+  function assistant() {
+    const el = document.createElement("div");
+    el.className = "msg-ai";
+    el.innerHTML = `
+      <div class="ai-head"><lab-mark size="26" state="thinking" label=""></lab-mark><span class="label shimmer">Thinking</span></div>
+      <p class="ai-text" hidden></p>
+      <div class="ai-actions" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h8"></path></svg><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11v9H4v-9zM7 11l4-8a2 2 0 0 1 2 2v4h5.5a2 2 0 0 1 2 2.3l-1 6a2 2 0 0 1-2 1.7H7"></path></svg><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 13V4h3v9zM17 13l-4 8a2 2 0 0 1-2-2v-4H5.500a2 2 0 0 1-2-2.300l1-6A2 2 0 0 1 6.500 5H17"></path></svg><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M8 8l4-4 4 4M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"></path></svg></div>`;
+    thread.append(el);
+    toBottom();
+    const mark = $("lab-mark", el);
+    const label = $<HTMLElement>(".label", el);
+    const text = $<HTMLElement>(".ai-text", el);
+    const actions = $<HTMLElement>(".ai-actions", el);
+    const head = $<HTMLElement>(".ai-head", el);
+    return {
+      // Like ChatGPT: the loader goes away once the answer starts to land.
+      async settle(nap: (ms: number) => Promise<void>) {
+        await nap(900);
+        head.classList.add("gone");
+        await nap(300);
+      },
+      status(state: string, words: string, shimmer = false) {
+        mark.setAttribute("state", state);
+        label.textContent = words;
+        label.classList.toggle("shimmer", shimmer);
+      },
+      async say(words: string, nap: (ms: number) => Promise<void>) {
+        text.hidden = false;
+        await typeWords(text, words, nap, [55, 55]);
+        if (head.classList.contains("gone")) actions.hidden = false;
+      },
+    };
+  }
+
+  const SCENES = [
+    async (nap: (ms: number) => Promise<void>) => {
+      await ask("Add a pricing section to the landing page.", nap);
+      const ai = assistant();
+      await nap(1400);
+      ai.status("working", "Working", true);
+      await nap(3000);
+      ai.status("done", "Done");
+      await ai.settle(nap);
+      await ai.say("I added a three-column pricing section under the hero.", nap);
+      composer("idle");
+      await nap(3000);
+    },
+    async (nap: (ms: number) => Promise<void>) => {
+      await ask("Run the tests.", nap);
+      const ai = assistant();
+      await nap(1000);
+      ai.status("working", "Working", true);
+      await nap(2600);
+      ai.status("failed", "Tests failed");
+      await ai.say("One test failed: expected 200, got 500.", nap);
+      await nap(1600);
+      ai.status("thinking", "Thinking", true);
+      await nap(1500);
+      ai.status("working", "Working", true);
+      await nap(2400);
+      ai.status("done", "Done");
+      await ai.settle(nap);
+      await ai.say(" Fixed the status code. All 14 tests pass.", nap);
+      composer("idle");
+      await nap(3000);
+    },
+  ];
+
+  async function chatLoop() {
+    const run = ++chatRun;
+    const nap = napFor(run);
+    thread.replaceChildren();
+    fieldText.textContent = "";
+    field.classList.remove("typing");
+    composer("idle");
+    try {
+      await nap(500);
+      while (run === chatRun) {
+        await SCENES[chatNext % SCENES.length](nap);
+        chatNext++;
+        await nap(900);
+        while (thread.children.length > 4) thread.firstElementChild!.remove();
+      }
+    } catch (e) {
+      if (!(e instanceof Cancelled)) throw e;
+    }
+  }
+
+  send.addEventListener("click", () => {
+    chatNext++;
+    chatLoop();
+  });
+
+  // ------------------------------------------------------------------ 3. Voice
+  const orbMark = $("#orb-mark");
+  const caption = $<HTMLElement>("#caption");
+  const heard = $<HTMLElement>("#heard");
+  let voiceRun = 0;
+  let voiceNext = 0;
+
+  const voiceNap = (id: number) => async (ms: number) => {
+    await sleep(ms);
+    if (id !== voiceRun) throw new Cancelled();
+  };
+
+  function tell(state: string, words: string) {
+    orbMark.setAttribute("state", state);
+    caption.textContent = words;
+    caption.dataset.state = state;
+  }
+
+  async function speak(text: string, nap: (ms: number) => Promise<void>, pace: [number, number]) {
+    heard.textContent = "";
+    await typeWords(heard, text, nap, pace);
+  }
+
+  const VOICE_SCENES = [
+    async (nap: (ms: number) => Promise<void>) => {
+      tell("voice", "Listening");
+      await nap(700);
+      await speak("What\u2019s the weather in Hanoi?", nap, [140, 120]);
+      await nap(500);
+      tell("thinking", "Thinking");
+      await nap(1700);
+      tell("working", "Checking the forecast");
+      await nap(2600);
+      tell("voice", "Speaking");
+      await speak("It\u2019s 28 degrees and sunny. Bring sunglasses.", nap, [190, 120]);
+      await nap(700);
+      tell("done", "Done");
+      await nap(2200);
+    },
+    async (nap: (ms: number) => Promise<void>) => {
+      tell("voice", "Listening");
+      await nap(700);
+      await speak("Play my focus playlist.", nap, [140, 120]);
+      await nap(500);
+      tell("thinking", "Thinking");
+      await nap(1300);
+      tell("working", "Connecting");
+      await nap(2400);
+      tell("failed", "Couldn\u2019t connect");
+      await speak("I couldn\u2019t reach your music app.", nap, [60, 40]);
+      await nap(2800);
+    },
+  ];
+
+  async function voiceLoop() {
+    const id = ++voiceRun;
+    const nap = voiceNap(id);
+    tell("idle", "Tap to talk");
+    heard.textContent = "";
+    try {
+      await nap(900);
+      while (id === voiceRun) {
+        await VOICE_SCENES[voiceNext % VOICE_SCENES.length](nap);
+        voiceNext++;
+        heard.textContent = "";
+        tell("idle", "Tap to talk");
+        await nap(1500);
+      }
+    } catch (e) {
+      if (!(e instanceof Cancelled)) throw e;
+    }
+  }
+
+  $("#orb").addEventListener("click", () => {
+    voiceNext++;
+    voiceLoop();
+  });
+
+  // ------------------------------------------------------------- 4. Everywhere
+  const cycles = $$<HTMLElement>("[data-cycle]");
+  let everywhereTimers: number[] = [];
+
+  function startEverywhere() {
+    stopEverywhere();
+    cycles.forEach((el) => {
+      const list = el.dataset.cycle!.split(",");
+      const texts = el.dataset.texts?.split("|");
+      const marks = el.matches("lab-mark") ? [el] : $$("lab-mark", el);
+      const label = el.querySelector("[data-text]");
+      let i = 0;
+      const apply = () => {
+        const state = list[i % list.length];
+        marks.forEach((m) => m.setAttribute("state", state));
+        if (texts && label) {
+          // The button hugs its words, so glide to the new width instead of jumping.
+          const from = el.offsetWidth;
+          label.textContent = texts[i % texts.length];
+          if (el.classList.contains("pillbtn") && !reduced.matches) {
+            el.style.width = "";
+            const to = el.offsetWidth;
+            el.style.width = `${from}px`;
+            el.offsetWidth;
+            el.style.width = `${to}px`;
+          }
+        }
+        i++;
+      };
+      everywhereTimers.push(
+        window.setTimeout(() => {
+          apply();
+          everywhereTimers.push(window.setInterval(apply, 2300));
+        }, Number(el.dataset.offset ?? 0)),
+      );
+    });
+  }
+  function stopEverywhere() {
+    everywhereTimers.forEach((t) => (clearTimeout(t), clearInterval(t)));
+    everywhereTimers = [];
+  }
+
+  // --------------------------------------------------------------------- Tabs
+  const tabs = $$<HTMLButtonElement>("[data-tab]");
+  const order: Panel[] = ["states", "chat", "voice", "everywhere"];
+  let active: Panel | null = null;
+
+  function activate(id: Panel, push = true) {
+    if (id === active) return;
+    active = id;
+    for (const t of tabs) {
+      const on = t.dataset.tab === id;
+      t.setAttribute("aria-selected", String(on));
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(`panel-${t.dataset.tab}`)!.hidden = !on;
+    }
+    // Only the visible panel runs its timers.
+    clearTimeout(statesTimer);
+    chatRun++;
+    voiceRun++;
+    stopEverywhere();
+    if (id === "states") loopStates();
+    if (id === "chat") chatLoop();
+    if (id === "voice") voiceLoop();
+    if (id === "everywhere") startEverywhere();
+    if (push) history.replaceState(null, "", `#${id}`);
+  }
+
+  tabs.forEach((t) => t.addEventListener("click", () => activate(t.dataset.tab as Panel)));
+  addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const at = order.indexOf(active!);
+    if (e.key >= "1" && e.key <= "4") activate(order[Number(e.key) - 1]);
+    else if (e.key === "ArrowRight") activate(order[(at + 1) % order.length]);
+    else if (e.key === "ArrowLeft") activate(order[(at + order.length - 1) % order.length]);
+    else return;
+    tabs.find((t) => t.dataset.tab === active)?.focus();
+  });
+  addEventListener("hashchange", () => {
+    const id = location.hash.slice(1) as Panel;
+    if (order.includes(id)) activate(id, false);
+  });
+
+  const first = location.hash.slice(1) as Panel;
+  activate(order.includes(first) ? first : "states", false);
+</script>
+
+<style is:global>
+  :root {
+    --lab-bg: #0a0a0b;
+    --lab-fg: #f2f1f4;
+    --lab-muted: #8a8990;
+    --lab-chip: rgb(28 28 30 / 0.7);
+    --lab-line: rgb(255 255 255 / 0.1);
+    --lime: #c8e26a;
+    --coral: #ff806c;
+  }
+  html, body { height: 100%; overflow: hidden; background: radial-gradient(120% 90% at 50% 38%, #151518 0%, #0a0a0b 62%); }
+
+  .sm { position: fixed; inset: 0; }
+  .bar { position: absolute; top: 0; left: 0; right: 0; z-index: 5; display: flex; justify-content: center; padding: 16px; }
+  .tabs { display: flex; gap: 2px; padding: 4px; border-radius: 999px; background: var(--lab-chip); border: 1px solid var(--lab-line); backdrop-filter: blur(12px); max-width: 100%; overflow-x: auto; }
+  .tabs button { font: inherit; font-size: 13px; padding: 8px 16px; border: 0; border-radius: 999px; background: transparent; color: var(--lab-muted); cursor: pointer; white-space: nowrap; }
+  .tabs button:hover { color: var(--lab-fg); }
+  .tabs button[aria-selected="true"] { background: #f2f0f5; color: #111; }
+  .sm button:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+
+  .panel { position: absolute; inset: 0; padding: 84px 20px 84px; display: grid; overflow: auto; align-content: safe center; }
+  .panel[hidden] { display: none; }
+
+  /* 1. States */
+  .panel#panel-states { place-content: safe center; justify-items: center; gap: 40px; }
+  .hero { display: grid; justify-items: center; gap: 18px; }
+  .big { border: 0; background: none; padding: 0; cursor: pointer; line-height: 0; border-radius: 24px; }
+  .name { margin: 0; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--lab-muted); transition: opacity 0.2s; }
+  .hero.paused .name { opacity: 0.45; }
+  .picker { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .picker button { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 18px; border: 1px solid var(--lab-line); background: transparent; cursor: pointer; transition: border-color 0.2s, background 0.2s; }
+  .picker button:hover { border-color: var(--lab-muted); }
+  .picker button[aria-pressed="true"] { background: #1c1c20; border-color: #f2f1f4; }
+
+  /* 2. Chat: a phone, with the composer pinned to the bottom of its screen */
+  .panel#panel-chat { place-items: center; }
+  .phone-box { position: relative; width: calc(414px * var(--ps, 1)); height: calc(868px * var(--ps, 1)); flex: none; }
+  .phone { position: absolute; top: 0; left: 0; width: 414px; height: 868px; padding: 12px; border-radius: 64px; transform: scale(var(--ps, 1)); transform-origin: 0 0;
+    background: linear-gradient(150deg, #34343a 0%, #17171a 45%, #26262b 100%);
+    box-shadow: 0 0 0 1.5px #0a0a0b, inset 0 0 0 1px rgb(255 255 255 / 0.1), 0 50px 100px -30px rgb(0 0 0 / 0.85), 0 0 80px -20px rgb(120 150 255 / 0.08); }
+  .screen { position: relative; width: 390px; height: 844px; border-radius: 52px; overflow: hidden; background: #212121; color: #ececec; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .appbar { position: absolute; top: 0; left: 0; right: 0; height: 100px; padding: 46px 14px 0; display: flex; align-items: center; justify-content: space-between; z-index: 4; background: linear-gradient(#212121 75%, rgb(33 33 33 / 0)); }
+  .appbar .icon { width: 44px; height: 44px; display: grid; place-items: center; color: #ececec; }
+  .appbar .title { display: inline-flex; align-items: center; gap: 5px; font-size: 18px; font-weight: 600; }
+  .appbar .title svg { color: #8e8e93; }
+
+  .thread { position: absolute; inset: 0 0 96px 0; overflow-y: auto; padding: 108px 16px 24px; display: flex; flex-direction: column; gap: 26px; scrollbar-width: none; overscroll-behavior: contain; }
+  .thread::-webkit-scrollbar { display: none; }
+  .msg-user { align-self: flex-end; max-width: 78%; background: #303030; padding: 11px 18px; border-radius: 24px; font-size: 17px; line-height: 1.42; animation: rise 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .msg-ai { display: grid; gap: 12px; animation: rise 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .ai-head { display: flex; align-items: center; gap: 10px; height: 28px; font-size: 15px; font-weight: 500; color: #a6a6ae; }
+  .ai-head { overflow: hidden; transition: height 0.3s ease, opacity 0.3s ease, margin 0.3s ease; }
+  .ai-head.gone { height: 0; opacity: 0; margin-bottom: -12px; }
+  .ai-head .label { transition: color 0.3s; }
+  .label.shimmer { background: linear-gradient(100deg, #77777f 35%, #f4f4f6 50%, #77777f 65%) 0 0 / 220% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: shimmer 1.7s linear infinite; }
+  .ai-text { margin: 0; font-size: 17px; line-height: 1.55; color: #ececec; }
+  .ai-actions[hidden] { display: none; }
+  .ai-actions { display: flex; gap: 20px; color: #8e8e93; animation: rise 0.35s ease both; }
+
+  /* The composer never scrolls away: it sits on a fade at the bottom of the screen. */
+  .dock { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 12px 28px; background: #212121; z-index: 3; pointer-events: none; }
+  .composer { pointer-events: auto; display: flex; align-items: center; gap: 4px; min-height: 56px; padding: 8px 8px 8px 10px; border-radius: 28px; background: #303030; }
+  .plus, .mic { flex: none; width: 36px; height: 40px; display: grid; place-items: center; color: #b4b4b8; }
+  .field { position: relative; flex: 1; min-width: 0; min-height: 40px; padding: 8px 4px; font-size: 17px; line-height: 24px; color: #f1f1f4; }
+  .field .ph { position: absolute; inset: 8px 4px; color: #8e8e93; pointer-events: none; }
+  .field:has(#field-text:not(:empty)) .ph, .field.typing .ph { display: none; }
+  .field.typing::after { content: ""; display: inline-block; width: 2px; height: 20px; margin-left: 1px; vertical-align: -4px; background: #ececec; animation: blink 1s steps(2) infinite; }
+  .go { flex: none; width: 40px; height: 40px; border: 0; border-radius: 999px; background: #ececec; color: #212121; display: grid; place-items: center; cursor: pointer; transition: background 0.25s, transform 0.25s; }
+  .go:hover { transform: scale(1.05); }
+  .go svg { grid-area: 1 / 1; }
+  .go .arrow { display: none; }
+  .go[data-mode="send"] .wave, .go[data-mode="busy"] .wave { display: none; }
+  .go[data-mode="send"] .arrow { display: block; animation: pop 0.3s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+  .go .load { display: none; grid-area: 1 / 1; }
+  .go[data-mode="busy"] { background: #424242; }
+  .go[data-mode="busy"] .load { display: block; }
+  .go[data-mode="busy"] .arrow { display: none; }
+
+  .unseen { opacity: 0; }
+  .soft { animation: soften 0.5s ease-out both; }
+  @keyframes soften { from { opacity: 0; filter: blur(1.5px); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+  @keyframes shimmer { to { background-position: -220% 0; } }
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes pop { from { transform: scale(0.5); opacity: 0; } }
+
+  /* 3. Voice: one big mark is the whole interface */
+  .panel#panel-voice { place-content: center; justify-items: center; align-content: center; gap: 28px; text-align: center; }
+  .orb { border: 0; background: none; padding: 0; border-radius: 999px; cursor: pointer; line-height: 0; }
+  .caption { margin: 0; height: 20px; line-height: 20px; font-size: 15px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--lab-muted); }
+  .caption[data-state="voice"] { color: #7ae0d6; }
+  .caption[data-state="thinking"] { color: #a8b2ff; }
+  .caption[data-state="done"] { color: var(--lime); }
+  .caption[data-state="failed"] { color: var(--coral); }
+  .heard { margin: 0; width: min(560px, 90vw); height: 4.05em; overflow: hidden; font-size: clamp(20px, 3vw, 30px); line-height: 1.35; color: var(--lab-fg); }
+
+  /* 4. Everywhere */
+  .panel#panel-everywhere { place-items: center; }
+  .board { width: min(920px, 100%); display: grid; gap: 16px; grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(210px, auto); }
+  .tile { border: 1px solid var(--lab-line); border-radius: 24px; background: #101012; padding: 28px; display: grid; gap: 12px; align-content: center; }
+  .tile.center { place-content: center; justify-items: center; }
+  .toast { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 16px; background: #1c1c20; font-size: 16px; }
+  .pillbtn { display: inline-flex; align-items: center; gap: 12px; padding: 16px 30px; white-space: nowrap; overflow: hidden; transition: width 0.4s cubic-bezier(0.3, 0.8, 0.2, 1); border-radius: 999px; background: #26262b; border: 1px solid var(--lab-line); font-size: 18px; }
+  .table { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .table li { display: flex; align-items: center; gap: 16px; padding: 12px 14px; border-radius: 12px; font-size: 17px; }
+  .table li:nth-child(odd) { background: #151518; }
+  .tabstrip { display: flex; align-items: flex-end; gap: 4px; padding: 0 4px; }
+  .browser { display: inline-flex; align-items: center; gap: 10px; padding: 12px 20px; border-radius: 14px 14px 0 0; background: #1f1f23; font-size: 15px; color: #e4e2e8; }
+  .browser.dim { background: transparent; color: var(--lab-muted); }
+  .fav { display: grid; place-items: center; }
+
+  /* Wide screens: one row of four, so everything fits whatever the height. */
+  @media (min-width: 1100px) {
+    .board { width: min(1280px, 100%); grid-template-columns: repeat(4, 1fr); grid-auto-rows: minmax(320px, auto); }
+    .tile { padding: 22px; }
+    .toast { padding: 12px 14px; font-size: 15px; gap: 12px; }
+    .pillbtn { padding: 14px 26px; font-size: 17px; }
+    .table li { padding: 10px 12px; font-size: 16px; }
+    .browser { padding: 11px 16px; font-size: 14px; }
+  }
+
+  @media (max-width: 760px) {
+    .board { grid-template-columns: 1fr; }
+    .picker { gap: 6px; }
+    .picker button { width: 50px; height: 50px; border-radius: 16px; }
+  }
+  @media (max-width: 460px) {
+    .board { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { .msg-user, .msg-ai, .step, .ai-foot, .label.shimmer, .go svg, .soft { animation: none; } .label.shimmer { -webkit-text-fill-color: currentColor; background: none; } }
+</style>

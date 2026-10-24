@@ -1,6 +1,6 @@
 // Serves the built site at delightly.dev/lab/*.
 //
-// Astro writes dist/ without the /lab prefix (dist/sample/index.html), so the
+// Astro writes dist/ without the /lab prefix (dist/status-thread/index.html), so the
 // worker strips it before looking up the file. It also adds the trailing slash
 // itself, because the built-in redirect would drop /lab from the Location.
 interface Env {

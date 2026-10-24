@@ -7,13 +7,8 @@ export interface Project {
 
 export const projects: Project[] = [
   {
-    slug: "sample",
-    title: "Sample",
-    description: "A starting point: a canvas, the lab frame, and a share button.",
-  },
-  {
-    slug: "voice-doodle",
-    title: "Voice doodle",
-    description: "A scribble that ripples and spins when it speaks.",
+    slug: "status-thread",
+    title: "Status thread",
+    description: "One thread that reshapes itself for every state: idle, listening, thinking, working, done, failed.",
   },
 ];
