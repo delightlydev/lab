@@ -527,7 +527,9 @@ const rows = ["api", "web", "admin", "worker"];
 </script>
 
 <style is:global>
-  :root {
+  /* This demo is always dark, whatever the visitor's system theme. */
+  html:root {
+    color-scheme: dark;
     --lab-bg: #0a0a0b;
     --lab-fg: #f2f1f4;
     --lab-muted: #8a8990;
@@ -536,7 +538,7 @@ const rows = ["api", "web", "admin", "worker"];
     --lime: #c8e26a;
     --coral: #ff806c;
   }
-  html, body { height: 100%; overflow: hidden; background: radial-gradient(120% 90% at 50% 38%, #151518 0%, #0a0a0b 62%); }
+  html:root, html:root body { height: 100%; overflow: hidden; background: radial-gradient(120% 90% at 50% 38%, #151518 0%, #0a0a0b 62%); }
 
   .sm { position: fixed; inset: 0; }
   .bar { position: absolute; top: 0; left: 0; right: 0; z-index: 5; display: flex; justify-content: center; padding: 16px; }
