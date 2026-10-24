@@ -11,4 +11,9 @@ export const projects: Project[] = [
     title: "Sample",
     description: "A starting point: a canvas, the lab frame, and a share button.",
   },
+  {
+    slug: "voice-doodle",
+    title: "Voice doodle",
+    description: "A scribble that ripples and spins when it speaks.",
+  },
 ];

@@ -7,7 +7,7 @@ Small interface experiments, served at `delightly.dev/lab/<project>`.
 1. Create `src/pages/<slug>/index.astro` and wrap it in `LabLayout`.
 2. Add an entry to `src/projects.ts` so it shows on the index.
 
-Each project keeps its own styles and script; nothing is shared except the frame
+Each project keeps its own styles and script (larger ones put code in `src/projects/<slug>/`); nothing is shared except the frame
 (brand + share button) in `src/layouts/LabLayout.astro`.
 
 ## Develop
