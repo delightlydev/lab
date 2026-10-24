@@ -16,7 +16,9 @@ Run these in order. Skipping one is how past bugs shipped.
    **light and dark** system themes, and once with reduced motion.
 5. Open the screenshots and look at them yourself.
 6. Report what you tested, what you didn't, and anything that failed. Lead with the result.
-7. Stop. Don't commit or push until the user says so (see Process).
+7. Open the demo's local preview in the user's browser (`open http://localhost:4401/lab/<slug>/`)
+   so they can look right away. Do this every time you finish a change, without being asked.
+8. Stop. Don't commit or push until the user says so (see Process).
 
 ## The standard: every demo is world-class
 
