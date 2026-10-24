@@ -1,0 +1,31 @@
+---
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+---
+
+<button type="button" class="lab-share" data-title={title}>Share</button>
+
+<style>
+  .lab-share { cursor: pointer; }
+</style>
+
+<script>
+  // Native share sheet where it exists, otherwise copy the link.
+  const button = document.querySelector<HTMLButtonElement>(".lab-share");
+  button?.addEventListener("click", async () => {
+    const data = { title: button.dataset.title, url: location.href };
+    try {
+      if (navigator.share) {
+        await navigator.share(data);
+        return;
+      }
+      await navigator.clipboard.writeText(data.url);
+      button.textContent = "Link copied";
+      setTimeout(() => (button.textContent = "Share"), 1600);
+    } catch {
+      // The user dismissed the share sheet; nothing to do.
+    }
+  });
+</script>

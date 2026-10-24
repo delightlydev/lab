@@ -1,0 +1,47 @@
+---
+import LabLayout from "../../layouts/LabLayout.astro";
+---
+
+<LabLayout title="Sample" description="A starting point for a lab project.">
+  <canvas id="stage"></canvas>
+</LabLayout>
+
+<style>
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+</style>
+
+<script>
+  // Each project owns its script. This one drifts a few dots toward the pointer.
+  const canvas = document.getElementById("stage") as HTMLCanvasElement;
+  const ctx = canvas.getContext("2d")!;
+  const dots = Array.from({ length: 60 }, () => ({ x: Math.random(), y: Math.random(), s: 0.2 + Math.random() }));
+  const pointer = { x: 0.5, y: 0.5 };
+
+  function resize() {
+    const dpr = devicePixelRatio || 1;
+    canvas.width = innerWidth * dpr;
+    canvas.height = innerHeight * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  addEventListener("resize", resize);
+  addEventListener("pointermove", (e) => {
+    pointer.x = e.clientX / innerWidth;
+    pointer.y = e.clientY / innerHeight;
+  });
+  resize();
+
+  function frame() {
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    ctx.fillStyle = getComputedStyle(document.body).color;
+    for (const d of dots) {
+      d.x += (pointer.x - d.x) * 0.004 * d.s;
+      d.y += (pointer.y - d.y) * 0.004 * d.s;
+      ctx.globalAlpha = 0.15 + d.s * 0.4;
+      ctx.beginPath();
+      ctx.arc(d.x * innerWidth, d.y * innerHeight, 2 + d.s * 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    requestAnimationFrame(frame);
+  }
+  frame();
+</script>

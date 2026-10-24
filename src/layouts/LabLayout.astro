@@ -1,0 +1,82 @@
+---
+import ShareButton from "../components/ShareButton.astro";
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = "An experiment from the Delightly lab." } = Astro.props;
+const home = import.meta.env.BASE_URL;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} · Delightly Lab</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={`${title} · Delightly Lab`} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={Astro.url.href} />
+    <link rel="canonical" href={Astro.url.href} />
+  </head>
+  <body>
+    <slot />
+    <nav class="lab-frame">
+      <a href={home} class="lab-brand">Delightly <span>Lab</span></a>
+      <ShareButton title={title} />
+    </nav>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    color-scheme: light dark;
+    --lab-bg: #fafaf9;
+    --lab-fg: #1c1917;
+    --lab-muted: #78716c;
+    --lab-chip: rgb(255 255 255 / 0.7);
+    --lab-line: rgb(0 0 0 / 0.1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --lab-bg: #0c0a09;
+      --lab-fg: #fafaf9;
+      --lab-muted: #a8a29e;
+      --lab-chip: rgb(28 25 23 / 0.7);
+      --lab-line: rgb(255 255 255 / 0.12);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--lab-bg);
+    color: var(--lab-fg);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  /* The frame floats over the project, so the page itself stays a blank canvas. */
+  .lab-frame {
+    position: fixed;
+    inset: auto 16px 16px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .lab-frame > * {
+    pointer-events: auto;
+    background: var(--lab-chip);
+    border: 1px solid var(--lab-line);
+    backdrop-filter: blur(12px);
+    color: var(--lab-fg);
+    border-radius: 999px;
+    padding: 8px 14px;
+    font: inherit;
+    font-size: 13px;
+    text-decoration: none;
+  }
+  .lab-brand span { color: var(--lab-muted); }
+</style>
