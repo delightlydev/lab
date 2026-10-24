@@ -13,7 +13,8 @@
 //            that closes in from the rim and lands softly at the centre, like listening
 //   ripple   a still surface where each word lands as a water drop and ripples spread outward, like speaking
 //   check    a faint circle with a thin check drawn inside
-//   shake    a ball that shakes once as it arrives
+//   tremor   a light earthquake on a flat round disc of dots in straight rows: a
+//            quick shudder, a wave of shaking across it, and smaller aftershocks
 //
 // Dots change shape one after another, not all at once. Reduced motion gets a
 // still pose and no loop.
@@ -47,7 +48,7 @@ const BLOBS = [
   [0.46, 0.73, 0.76, 1.0, 5.1, 5.08, 0.15, 0.89],
 ];
 
-export const STATES = ["sphere", "swell", "sweep", "halftone", "converge", "ripple", "check", "shake"];
+export const STATES = ["sphere", "swell", "sweep", "halftone", "converge", "ripple", "check", "tremor"];
 
 const hash = (i) => {
   const s = Math.sin(i * 127.1 + 311.7) * 43758.5453;
@@ -76,6 +77,27 @@ function dropAt(e) {
   const el = (hash(e * 7 + 3) - 0.5) * 1.2;
   const cz = Math.cos(el);
   return { time, x: Math.sin(az) * cz, y: Math.sin(el), z: Math.cos(az) * cz, str: 0.55 + 0.45 * hash(e * 11 + 4), speed: 0.7 + 0.3 * hash(e * 13 + 5) };
+}
+
+// The check after it has been drawn: now and then a glint glides along the
+// stroke, and a faint ring of light spreads out to the circle. Both come at
+// irregular moments, never on a beat.
+function glintAt(e) {
+  const time = 4.4 * (e + 0.9 * Math.sin(0.7 * e + 1) + 0.5 * Math.sin(0.23 * e + 2)) + (hash(e * 3 + 21) - 0.5) * 2.4;
+  return { time, dur: 1.0 + 0.6 * hash(e * 5 + 22), str: 0.55 + 0.45 * hash(e * 7 + 23) };
+}
+function echoAt(e) {
+  const time = 8.6 * (e + 0.7 * Math.sin(0.9 * e + 2) + 0.4 * Math.sin(0.31 * e)) + (hash(e * 3 + 31) - 0.5) * 3.6;
+  return { time, str: 0.25 + 0.2 * hash(e * 7 + 32) };
+}
+
+// The tremor state: aftershocks, at irregular moments, each one smaller than the
+// last, from its own spot on the ball and shaking at its own pace.
+function shockAt(e) {
+  const time = 0.55 + 2.3 * (e + 0.9 * Math.sin(0.8 * e + 1) + 0.5 * Math.sin(0.31 * e + 2)) + (hash(e * 3 + 81) - 0.5) * 1.2;
+  const az = hash(e * 5 + 82) * TAU;
+  const r = 0.7 * Math.sqrt(hash(e * 7 + 83));
+  return { time, x: Math.cos(az) * r, y: Math.sin(az) * r, str: (0.3 + 0.35 * hash(e * 11 + 84)) / (1 + 0.28 * e), freq: 7 + 4 * hash(e * 13 + 85), decay: 0.45 + 0.4 * hash(e * 17 + 86) };
 }
 
 class Orb {
@@ -174,6 +196,7 @@ class Orb {
         if (Math.hypot(cx, cy) <= 1) cells.push([cx, cy]);
       }
     }
+    this.gn = g; // cells across the grid
     this.gx = new Float32Array(n);
     this.gy = new Float32Array(n);
     this.gOn = new Uint8Array(n);
@@ -206,7 +229,7 @@ class Orb {
     this.enter = t;
     this.settled = false;
     if (reduced.matches) {
-      this.snap(t + 0.8);
+      this.snap(t + 3.8);
       this.t = 0;
       this.draw();
     }
@@ -409,15 +432,42 @@ class Orb {
         break;
       }
       case "check": {
-        // A faint, uneven circle with a thin check drawn inside it.
+        // The result. It arrives like a pen stroke: the faint circle gathers,
+        // then the check is drawn on, a bright pen at its tip, and lands with a
+        // small bounce. After that it stays quietly alive: now and then a glint
+        // glides along the stroke, a faint ring of light spreads out to the
+        // circle, and the circle's dots twinkle while the ring turns and breathes
+        // very slowly. All of it small, and none of it on a beat.
+        const gather = Math.min(1, Math.max(0, tin / 0.6));
+        const settle = Math.min(1, Math.max(0, (tin - 1.3) / 1.0)); // the idle life fades in once it has landed
+        // Light spreading out from the check: once as it lands, then now and then.
+        const wave = (r) => {
+          if (reduced.matches) return 0; // a still pose has no light mid-flight
+          let v = 0;
+          if (tin < 12) {
+            const age = tin - 1.2;
+            if (age > 0) v += 0.55 * Math.exp(-age / 0.9) * Math.exp(-Math.pow((r - 1.0 * (1 - Math.exp(-age / 0.6))) / 0.13, 2));
+          }
+          const first = Math.floor(t / 8.6);
+          for (let e = Math.max(0, first - 2); e <= first + 1; e++) {
+            const m = echoAt(e);
+            const age = t - m.time;
+            if (age < 0 || age > 3) continue;
+            v += settle * m.str * 0.8 * Math.exp(-age / 1.2) * Math.exp(-Math.pow((r - 1.0 * (1 - Math.exp(-age / 0.8))) / 0.13, 2));
+          }
+          return v;
+        };
         if (i % 3 === 0) {
-          const a = hash(i + 3) * TAU;
-          const r = 0.92 + (hash(i + 17) - 0.5) * 0.07;
+          // The circle: dots that twinkle one by one, a ring that turns and breathes.
+          const own = hash(i + 3);
+          const a = own * TAU + 0.025 * t;
+          const r = (0.92 + (hash(i + 17) - 0.5) * 0.07) * (1 + 0.012 * Math.sin(0.5 * t + own * 6));
+          const tw = 0.5 + 0.5 * Math.sin(t * (0.5 + 0.9 * hash(i + 41)) + hash(i + 43) * TAU);
           o[0] = Math.cos(a) * r;
           o[1] = Math.sin(a) * r;
           o[2] = 0.8;
-          o[3] = 0.6;
-          o[4] = 0.5;
+          o[3] = (0.52 + 0.3 * tw * settle) * gather * (1 + 0.6 * wave(r));
+          o[4] = (0.34 + 0.3 * tw * settle + 0.26 * wave(r)) * gather;
           break;
         }
         const gn = Math.ceil((n * 2) / 3);
@@ -428,19 +478,97 @@ class Orb {
         const l1 = Math.hypot(B[0] - A[0], B[1] - A[1]);
         const l2 = Math.hypot(C[0] - B[0], C[1] - B[1]);
         const w = ((j + 0.5) / gn) * (l1 + l2);
+        const u = w / (l1 + l2); // how far along the stroke this dot is, 0 to 1
         const [p, q, v] = w < l1 ? [A, B, w / l1] : [B, C, (w - l1) / l2];
-        o[0] = p[0] + (q[0] - p[0]) * v;
-        o[1] = p[1] + (q[1] - p[1]) * v;
+        // The pen: it eases out as it goes, so the stroke slows into the end.
+        const k = Math.min(1, Math.max(0, (tin - 0.35) / 0.95));
+        const pen = 1 - Math.pow(1 - k, 2.2);
+        const shown = Math.min(1, Math.max(0, (pen * 1.06 - u) / 0.06));
+        const head = pen < 1 ? Math.exp(-Math.pow((u - pen) / 0.05, 2)) : 0; // the bright tip of the pen
+        // A small bounce as it lands, outward from the middle of the mark.
+        const since = tin - 1.3;
+        const bounce = since > 0 ? 0.06 * Math.sin(since * 13) * Math.exp(-since * 4.5) : 0;
+        let x = p[0] + (q[0] - p[0]) * v;
+        let y = p[1] + (q[1] - p[1]) * v;
+        x += (x - 0.02) * bounce;
+        y += (y + 0.02) * bounce;
+        const sx = w < l1 ? (B[0] - A[0]) / l1 : (C[0] - B[0]) / l2;
+        const sy = w < l1 ? (B[1] - A[1]) / l1 : (C[1] - B[1]) / l2;
+        // The glint: a soft highlight gliding along the stroke, now and then.
+        let glint = 0;
+        const first = Math.floor(t / 4.4);
+        for (let e = Math.max(0, first - 2); e <= first + 2 && !reduced.matches; e++) {
+          const m = glintAt(e);
+          const age = (t - m.time) / m.dur;
+          if (age < 0 || age > 1) continue;
+          const at = -0.15 + 1.3 * (age * age * (3 - 2 * age)); // eased, so it gathers speed and then slows
+          glint += settle * m.str * Math.exp(-Math.pow((u - at) / 0.12, 2)) * Math.sin(Math.PI * age);
+        }
+        // Under the glint the stroke swells: its dots fan out across it, so the
+        // highlight is a thicker, brighter patch gliding along a calmer line.
+        const fan = (hash(i + 81) - 0.5) * 0.03 * Math.min(1, glint * 1.6);
+        x += -sy * fan;
+        y += sx * fan;
+        const breathe = 1 + 0.012 * Math.sin(0.6 * t) * settle;
+        o[0] = x * breathe;
+        o[1] = y * breathe;
         o[2] = 0.8;
-        o[3] = 0.95;
-        o[4] = 1;
+        o[3] = (0.9 + 0.85 * head + 0.6 * glint + 0.4 * wave(Math.hypot(x, y))) * shown;
+        o[4] = Math.min(1, (0.7 + 0.3 * head + 0.35 * glint + 0.25 * wave(Math.hypot(x, y))) * shown);
         break;
       }
-      case "shake": {
-        // The ball again, with one hard shake as it arrives.
-        const shake = 0.05 * Math.sin(tin * 45) * Math.exp(-tin * 3.5);
-        ball(0.3, 0.9, 1, 0.9);
-        o[0] += shake;
+      case "tremor": {
+        // A light earthquake on a flat round disc of dots in straight rows, the kind of sudden alert you
+        // feel through a table. One quick shock shudders the whole disc sideways
+        // and dies away; a seismic wave runs across it from a spot inside, so the
+        // dots on the wave front shake most; then smaller aftershocks follow at
+        // irregular moments, each from its own spot and each weaker than the
+        // last, with only a faint hum in between. It is all small, a few pixels,
+        // and the dots keep their brightness: it is a vibration, not a flash.
+        // The dots sit on a square grid, in straight horizontal rows, cut to a disc.
+        const gx0 = this.gx[i];
+        const gy0 = this.gy[i];
+        const rho = Math.hypot(gx0, gy0);
+        let shakeX = 0;
+        let shakeY = 0;
+        let wave = 0;
+        const quake = (age, str, freq, decay, ex, ey, speed) => {
+          if (age < 0 || age > 5) return;
+          const env = str * (1 - Math.exp(-age / 0.05)) * Math.exp(-age / decay);
+          const d = Math.hypot(gx0 - ex, gy0 - ey); // distance from the spot it started
+          const front = Math.exp(-Math.pow((d - speed * age) / 0.5, 2)); // the wave front
+          const local = 0.4 + 0.6 * front;
+          const ph = TAU * freq * age - 6 * d - 2.5 * gx0 - 5 * gy0 + 5 * hash(i + 91) * 0.12; // each row slides a little out of step with the next
+          shakeX += env * local * Math.sin(ph);
+          shakeY += env * local * 0.42 * Math.sin(ph * 1.07 + 1.3);
+          wave += env * front;
+        };
+        const still = reduced.matches;
+        if (!still) {
+          quake(tin - 1.4, 1.0, 9, 0.8, 0.42, 0.2, 1.7); // the first, the strongest, once the disc has formed
+          const first = Math.max(0, Math.floor((t - 0.55) / 2.3));
+          for (let e = Math.max(0, first - 3); e <= first + 2; e++) {
+            const m = shockAt(e);
+            if (m.time < 2.4) continue;
+            quake(t - m.time, m.str, m.freq, m.decay, m.x, m.y, 1.5);
+          }
+        }
+        // The hum: a very faint tremor that never quite stops.
+        const hum = still ? 0 : 0.045 * (0.6 + 0.4 * Math.sin(0.8 * t)) * Math.sin(TAU * 6.3 * t + 5 * hash(i + 95));
+        const edge = Math.min(1, Math.max(0, (rho - 0.74) / 0.28));
+        const rim = edge * edge * (3 - 2 * edge);
+        const half = (this.size / 2) * 0.97;
+        const spacing = (half * 0.96 * 2) / this.gn; // pixels between neighbouring dots
+        const baseCss = Math.max(0.9, this.size * 0.0042 + 0.5);
+        const roomy = (0.36 * spacing) / (baseCss * 1.06);
+        const amp = 0.028; // the strongest shake, as a share of the disc's radius
+        const gx = still ? 0 : 0.0085 * shakeX; // the whole disc shudders too, a little, as one piece
+        o[0] = gx0 * 0.96 + amp * (shakeX + hum) + gx;
+        o[1] = gy0 * 0.96 + amp * (shakeY + 0.5 * hum);
+        o[2] = 0.7;
+        const want = (1.05 + 0.2 * Math.min(1, Math.abs(wave))) * (1 - 0.6 * rim) * (0.94 + 0.12 * hash(i + 71));
+        o[3] = this.gOn[i] ? Math.min(want, Math.max(0.45, roomy)) : 0;
+        o[4] = this.gOn[i] ? 0.8 * (1 - 0.55 * rim) : 0;
         break;
       }
     }
@@ -459,7 +587,9 @@ class Orb {
     // outward. Once the change is over every dot tracks its target tightly and
     // at the same pace; dots at different paces would trail a moving target by
     // different amounts and the lattice would look ragged.
-    const settle = Math.min(1, Math.max(0, (tin - 1.1) / 0.9));
+    // The tremor needs a stiff spring almost from the start, or the spring would
+    // smooth its quick shaking away; the others take longer to firm up.
+    const settle = this.state === "tremor" ? Math.min(1, Math.max(0, (tin - 0.55) / 0.7)) : Math.min(1, Math.max(0, (tin - 1.1) / 0.9));
     const lock = settle * settle * (3 - 2 * settle);
     for (let i = 0; i < n; i++) {
       const wait = 0.42 * this.rad[i] + 0.08 * hash(i + 40);

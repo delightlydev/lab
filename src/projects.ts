@@ -14,6 +14,6 @@ export const projects: Project[] = [
   {
     slug: "dot-orb",
     title: "Dot orb",
-    description: "A ball of dots that reshapes itself for each state: sphere, swell, sweep, halftone, converge, ripple, check, shake.",
+    description: "A ball of dots that reshapes itself for each state: sphere, swell, sweep, halftone, converge, ripple, check, tremor.",
   },
 ];

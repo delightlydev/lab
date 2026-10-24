@@ -10,16 +10,15 @@ const pickerBtns = $$("[data-state]");
 const names = pickerBtns.map((b) => b.dataset.state);
 pickerBtns.forEach((b) => mountOrb($(".dorb-orb", b), b.dataset.state));
 
-// The orb takes whatever room is left once the label and picker are placed,
-// up to a cap, so it is as large as it can be without scrolling.
+// The picker is anchored to the bottom, and the orb takes whatever room is left
+// above it, up to a cap, so it is as large as it can be without scrolling.
 function sizeHero() {
-  const stage = $(".dorb-stage");
   const main = $(".dorb");
-  const canvas = hero.orb.canvas;
-  const pad = parseFloat(getComputedStyle(main).paddingTop) + parseFloat(getComputedStyle(main).paddingBottom);
-  const others = stage.offsetHeight - canvas.offsetHeight;
-  const room = window.innerHeight - pad - others;
-  const px = Math.round(Math.max(200, Math.min(660, stage.clientWidth, room)));
+  const stage = $(".dorb-stage");
+  const style = getComputedStyle(main);
+  const pad = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  const room = window.innerHeight - pad - $(".dorb-picker").offsetHeight - 24;
+  const px = Math.round(Math.max(200, Math.min(820, stage.clientWidth, room)));
   if (px !== hero.orb.size) hero.resize(px);
 }
 sizeHero();
@@ -34,9 +33,6 @@ function setState(name) {
   current = name;
   hero.set(name);
   heroName.textContent = name;
-  heroName.classList.remove("dorb-pop");
-  void heroName.offsetWidth;
-  heroName.classList.add("dorb-pop");
   pickerBtns.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.state === name)));
 }
 function queueAuto() {
@@ -45,7 +41,7 @@ function queueAuto() {
   autoTimer = setTimeout(() => {
     setState(names[(names.indexOf(current) + 1) % names.length]);
     queueAuto();
-  }, 3200);
+  }, { check: 5200, tremor: 6500 }[current] || 3200);
 }
 pickerBtns.forEach((b) =>
   b.addEventListener("click", () => {

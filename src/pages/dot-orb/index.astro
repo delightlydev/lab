@@ -3,10 +3,10 @@ import LabLayout from "../../layouts/LabLayout.astro";
 
 const file = `${import.meta.env.BASE_URL}dot-orb/dot-orb-page.js`;
 
-const states = ["sphere", "swell", "sweep", "halftone", "converge", "ripple", "check", "shake"];
+const states = ["sphere", "swell", "sweep", "halftone", "converge", "ripple", "check", "tremor"];
 ---
 
-<LabLayout title="Dot orb" description="A ball of dots that reshapes itself for each state: sphere, swell, sweep, halftone, converge, ripple, check and shake.">
+<LabLayout title="Dot orb" description="A ball of dots that reshapes itself for each state: sphere, swell, sweep, halftone, converge, ripple, check and tremor.">
   <script is:inline type="module" src={file}></script>
 
   <main class="dorb">
@@ -15,7 +15,7 @@ const states = ["sphere", "swell", "sweep", "halftone", "converge", "ripple", "c
         <button type="button" id="dorb-hit" class="dorb-hit" aria-label="Pause or resume the loop" aria-pressed="false">
           <span id="dorb-hero" class="dorb-orb" data-n="900" data-size="320"></span>
         </button>
-        <p id="dorb-name" class="dorb-name" aria-live="polite">sphere</p>
+        <p id="dorb-name" class="dorb-sr" aria-live="polite">sphere</p>
       </div>
       <div class="dorb-picker" role="group" aria-label="State">
         {
@@ -40,15 +40,18 @@ const states = ["sphere", "swell", "sweep", "halftone", "converge", "ripple", "c
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 20px;
-    padding: 28px 16px 76px;
+    padding: 24px 16px 72px; /* the bottom keeps the picker clear of the brand and Share buttons */
   }
+  /* The picker is anchored to the bottom, above the brand and Share buttons; the
+     orb takes all the room above it and sits in the middle of that room. */
   .dorb-stage {
-    width: min(720px, 100%);
+    width: min(900px, 100%);
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 14px;
+    justify-content: space-between;
+    gap: 24px;
   }
   .dorb-picker button:focus-visible,
   .dorb-hit:focus-visible {
@@ -58,9 +61,11 @@ const states = ["sphere", "swell", "sweep", "halftone", "converge", "ripple", "c
   }
   .dorb-hero {
     width: 100%;
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
   }
   .dorb-hit {
     display: block;
@@ -80,31 +85,25 @@ const states = ["sphere", "swell", "sweep", "halftone", "converge", "ripple", "c
     justify-content: center;
     width: 100%;
   }
-  .dorb-name {
-    margin: 0;
-    height: 28px;
-    font-size: 17px;
-    font-weight: 500;
-    letter-spacing: -0.01em;
-    text-transform: capitalize;
-    color: var(--dorb-fg);
-  }
-  .dorb-pop {
-    animation: dorb-in 0.4s ease both;
-  }
-  @keyframes dorb-in {
-    from {
-      opacity: 0;
-    }
+  /* The state's name is announced to screen readers; sighted users read the picker. */
+  .dorb-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   .dorb-picker {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(68px, 1fr));
+    grid-template-columns: repeat(8, 1fr); /* one row on a wide screen, two even rows of four on a phone */
     gap: 8px 4px;
     width: 100%;
-    border-top: 1px solid var(--lab-line);
-    padding-top: 12px;
+    max-width: 720px;
   }
   .dorb-picker button {
     display: flex;
@@ -116,23 +115,27 @@ const states = ["sphere", "swell", "sweep", "halftone", "converge", "ripple", "c
     color: var(--dorb-mute);
     background: none;
     border: 0;
-    padding: 4px 0;
+    padding: 8px 0 6px;
+    border-radius: 12px;
     cursor: pointer;
-    transition: color 0.2s;
+    transition: color 0.2s, background-color 0.2s;
   }
   .dorb-picker button[aria-pressed="true"] {
     color: var(--dorb-fg);
+    background: var(--lab-line);
   }
   .dorb-cap {
     text-transform: capitalize;
   }
 
+  @media (max-width: 560px) {
+    .dorb-picker {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
   @media (prefers-reduced-motion: reduce) {
     .dorb-picker button {
       transition: none;
-    }
-    .dorb-pop {
-      animation: none;
     }
   }
 </style>
