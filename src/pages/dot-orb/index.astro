@@ -3,10 +3,10 @@ import LabLayout from "../../layouts/LabLayout.astro";
 
 const file = `${import.meta.env.BASE_URL}dot-orb/dot-orb-page.js`;
 
-const states = ["sphere", "swell", "sweep", "scan", "trace", "rings", "lobes", "check", "shake"];
+const states = ["sphere", "swell", "sweep", "halftone", "converge", "ripple", "check", "shake"];
 ---
 
-<LabLayout title="Dot orb" description="A ball of dots that reshapes itself for each state: sphere, swell, sweep, scan, trace, rings, lobes, check and shake.">
+<LabLayout title="Dot orb" description="A ball of dots that reshapes itself for each state: sphere, swell, sweep, halftone, converge, ripple, check and shake.">
   <script is:inline type="module" src={file}></script>
 
   <main class="dorb">

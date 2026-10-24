@@ -7,10 +7,11 @@
 //   sphere   a slowly turning ball
 //   swell    a ball whose surface rises and sinks as waves roll over it
 //   sweep    a faint ball with one bright arc circling it
-//   scan     a flat disc of rows, one row lit at a time
-//   trace    short lines written one after another, a pen dot leading
-//   rings    concentric rings, breathing
-//   lobes    the same rings, wobbling into five lobes
+//   halftone a square grid of dots, cut to a disc, where soft blobs of larger
+//            dots drift and merge
+//   converge a ball that draws in around a voice, like listening: it shrinks and
+//            brightens as a person speaks, and relaxes in the pauses
+//   ripple   a still surface where each word lands as a water drop and ripples spread outward, like speaking
 //   check    a faint circle with a thin check drawn inside
 //   shake    a ball that shakes once as it arrives
 //
@@ -34,13 +35,69 @@ const SHADES = Array.from({ length: 64 }, (_, k) => {
   return STOPS[i].map((v, c) => Math.round(v + (STOPS[i + 1][c] - v) * f));
 });
 
-export const STATES = ["sphere", "swell", "sweep", "scan", "trace", "rings", "lobes", "check", "shake"];
+// Orbit width, orbit height, speeds, phases, radius and strength of each halftone
+// blob. The layout was picked by search: the pattern is split into two or more
+// separate parts about nine tenths of the time.
+const BLOBS = [
+  [0.62, 0.64, 0.68, 0.66, 5.2, 3.49, 0.19, 0.88],
+  [0.61, 0.7, 0.78, 0.73, 4.99, 3.45, 0.16, 0.9],
+  [0.56, 0.58, 0.89, 1.0, 2.14, 0.77, 0.19, 0.94],
+  [0.73, 0.74, 1.03, 0.74, 3.75, 5.03, 0.17, 0.86],
+  [0.75, 0.52, 0.83, 0.71, 3.23, 2.69, 0.21, 0.95],
+  [0.46, 0.73, 0.76, 1.0, 5.1, 5.08, 0.15, 0.89],
+];
+
+export const STATES = ["sphere", "swell", "sweep", "halftone", "converge", "ripple", "check", "shake"];
 
 const hash = (i) => {
   const s = Math.sin(i * 127.1 + 311.7) * 43758.5453;
   return s - Math.floor(s);
 };
-const frac = (v) => v - Math.floor(v);
+
+// How loud a made-up talker is at time t, from 0 to 1: a run of words, each a
+// soft swell, with gaps and clusters so the rhythm is never even. who is 0 for a
+// person being listened to (slower, more uneven) and 1 for the assistant
+// speaking (steadier, more fluent). A real app would pass in the microphone or
+// speaker level here instead.
+const wordsMemo = new Map();
+function words(t, who) {
+  const key = who + ":" + t;
+  let v = wordsMemo.get(key);
+  if (v !== undefined) return v;
+  const gap = who ? 0.62 : 0.78; // seconds between words
+  const first = Math.floor(t / gap);
+  let sum = 0;
+  for (let e = Math.max(0, first - 6); e <= first + 4; e++) {
+    const start = gap * (e + 1.6 * Math.sin(0.52 * e + 1 + who) + 0.8 * Math.sin(0.17 * e + who * 2)) + (hash(e * 3 + who) - 0.5) * gap * 0.4;
+    const u = (t - start) / ((who ? 0.55 : 0.7) + 0.35 * hash(e * 5 + who + 1));
+    if (u > 0 && u < 1) sum += (0.45 + 0.55 * hash(e * 7 + who + 2)) * Math.pow(Math.sin(Math.PI * u), 2);
+  }
+  v = Math.min(1, sum);
+  if (wordsMemo.size > 480) wordsMemo.clear();
+  wordsMemo.set(key, v);
+  return v;
+}
+
+// The same, smoothed over a few tenths of a second, so a word comes up and dies
+// away softly. That is what a person sees in a good voice meter, and it keeps
+// the picture from flickering.
+export function voice(t, who) {
+  return (words(t, who) + words(t - 0.1, who) + words(t - 0.2, who) + words(t - 0.3, who) + words(t - 0.4, who)) / 5;
+}
+
+// Water drops for the speaking state: when each lands and where. Drops come at
+// irregular moments, in clusters and lulls, each at a random spot on the front
+// of the ball. A real app would raise a drop for each word the assistant speaks.
+const DROP_LIFE = 3.4;
+function dropAt(e) {
+  const g = 0.72;
+  const time = g * (e + 1.5 * Math.sin(0.47 * e + 1) + 0.9 * Math.sin(0.15 * e + 2)) + (hash(e * 3 + 1) - 0.5) * g * 0.5;
+  const az = (hash(e * 5 + 2) - 0.5) * 1.5; // across the front, not out at the edge
+  const el = (hash(e * 7 + 3) - 0.5) * 1.2;
+  const cz = Math.cos(el);
+  return { time, x: Math.sin(az) * cz, y: Math.sin(el), z: Math.cos(az) * cz, str: 0.55 + 0.45 * hash(e * 11 + 4), speed: 0.7 + 0.3 * hash(e * 13 + 5) };
+}
+
 
 class Orb {
   constructor(host, state) {
@@ -70,10 +127,6 @@ class Orb {
     const n = counts.reduce((a, c) => a + c, 0);
     this.n = n;
     this.sph = new Float32Array(n * 3);
-    this.row = new Int16Array(n); // latitude row of each dot
-    this.rowU = new Float32Array(n); // 0..1 along its row
-    this.ring = new Int16Array(n); // concentric ring of each dot
-    this.ringU = new Float32Array(n); // 0..1 around its ring
     this.cur = new Float32Array(n * 5); // x, y, z, size, alpha
     this.tar = new Float32Array(5);
     this.vel = new Float32Array(n * 3); // how fast each dot is moving, for the spring
@@ -86,25 +139,41 @@ class Orb {
         this.sph[idx * 3] = Math.cos(lon) * r;
         this.sph[idx * 3 + 1] = ys[b];
         this.sph[idx * 3 + 2] = Math.sin(lon) * r;
-        this.row[idx] = b;
-        this.rowU[idx] = (k + 0.5) / counts[b];
         this.rad[idx] = Math.hypot(this.sph[idx * 3], ys[b]);
       }
     }
 
-    // Rings for the rings and lobes states: wider rings hold more dots.
-    const rings = n < 150 ? 5 : 9;
-    this.rings = rings;
-    const rw = Array.from({ length: rings }, (_, k) => k + 1.5);
-    const rs = rw.reduce((a, c) => a + c, 0);
-    let ri = 0;
-    for (let k = 0; k < rings; k++) {
-      const c = k === rings - 1 ? n - ri : Math.round((rw[k] / rs) * n);
-      for (let j = 0; j < c && ri < n; j++, ri++) {
-        this.ring[ri] = k;
-        this.ringU[ri] = (j + 0.5) / c;
+    // A square grid cut to a disc, one cell per dot, for the halftone state. The
+    // grid is as fine as the dot count allows. Any dots left over are hidden.
+    const cellsFor = (g) => {
+      let c = 0;
+      for (let gy = 0; gy < g; gy++) {
+        for (let gx = 0; gx < g; gx++) {
+          if (Math.hypot(((gx + 0.5) / g) * 2 - 1, ((gy + 0.5) / g) * 2 - 1) <= 1) c++;
+        }
+      }
+      return c;
+    };
+    let g = 4;
+    while (cellsFor(g + 1) <= n) g++;
+    const cells = [];
+    for (let gy = 0; gy < g; gy++) {
+      for (let gx = 0; gx < g; gx++) {
+        const cx = ((gx + 0.5) / g) * 2 - 1;
+        const cy = 1 - ((gy + 0.5) / g) * 2;
+        if (Math.hypot(cx, cy) <= 1) cells.push([cx, cy]);
       }
     }
+    this.gx = new Float32Array(n);
+    this.gy = new Float32Array(n);
+    this.gOn = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      const cell = cells[i % cells.length];
+      this.gx[i] = cell[0];
+      this.gy[i] = cell[1];
+      this.gOn[i] = i < cells.length ? 1 : 0;
+    }
+
     this.resize(this.size);
     this.settled = false;
   }
@@ -140,7 +209,6 @@ class Orb {
     const sx = this.sph[i * 3];
     const sy = this.sph[i * 3 + 1];
     const sz = this.sph[i * 3 + 2];
-    const h = hash(i);
 
     // Ball states share a turning, tilted sphere. The spin eases faster and
     // slower and the tilt drifts a little, so it never repeats exactly.
@@ -160,11 +228,6 @@ class Orb {
       o[4] = alpha;
       return [x, y2, z2];
     };
-
-    const rows = this.rows;
-    const row = this.row[i];
-    const u = this.rowU[i];
-    const rowY = ((rows - 1 - row + 0.5) / rows) * 2 - 1;
 
     switch (state) {
       case "sphere": {
@@ -204,64 +267,77 @@ class Orb {
         o[4] = 0.5 + 0.5 * hit;
         break;
       }
-      case "scan": {
-        // A flat disc of rows; one row at a time lights up.
-        const chord = Math.sqrt(1 - rowY * rowY);
-        o[0] = (u * 2 - 1) * chord * 0.92;
-        o[1] = rowY * 0.92;
+      case "halftone": {
+        // The dots stay on a square grid; what moves is their size. Six small
+        // blobs of larger dots wander round the grid on their own orbits, so the
+        // pattern is mostly several separate parts that meet, merge and part.
+        const x = this.gx[i];
+        const y = this.gy[i];
+        const slow = t * 0.6; // the blobs' clock, slower than the orbits were tuned at
+        let f = 0;
+        for (const [ax, ay, fx, fy, px, py, r, amp] of BLOBS) {
+          const dx = x - ax * Math.sin(fx * slow + px);
+          const dy = y - ay * Math.cos(fy * slow + py);
+          f += amp * Math.exp(-(dx * dx + dy * dy) / (2 * r * r));
+        }
+        f = Math.min(1, f);
+        // A square grid cut to a circle has a stepped edge, with long straight
+        // runs at the sides. Fading every dot's size and brightness toward the
+        // rim makes the visible edge follow a true circle instead of the steps.
+        const edge = Math.min(1, Math.max(0, (Math.hypot(x, y) - 0.74) / 0.28));
+        const rim = edge * edge * (3 - 2 * edge);
+        o[0] = x * 0.96;
+        o[1] = y * 0.96;
         o[2] = 0.7;
-        const lit = Math.floor(t * 2.6) % rows;
-        const on = rows - 1 - row === lit;
-        o[3] = on ? 1.5 : 0.7;
-        o[4] = on ? 1 : 0.28;
+        o[3] = this.gOn[i] ? (0.3 + 1.45 * Math.pow(f, 1.3)) * (1 - 0.8 * rim) : 0;
+        o[4] = this.gOn[i] ? (0.3 + 0.7 * f) * (1 - 0.75 * rim) : 0;
         break;
       }
-      case "trace": {
-        // A few short lines are written one after another; a pen dot leads.
-        const lines = 5;
-        const mid = Math.floor(rows / 2);
-        const gap = Math.max(1, Math.round(rows / 8));
-        const line = Math.round((rows - 1 - row - (mid - Math.floor(lines / 2) * gap)) / gap);
-        const isLine = line >= 0 && line < lines && (rows - 1 - row - (mid - Math.floor(lines / 2) * gap)) % gap === 0;
-        o[0] = (u * 2 - 1) * 0.8;
-        o[1] = rowY * 0.92;
-        o[2] = 0.7;
-        o[3] = 0.9;
-        o[4] = 0;
-        if (isLine) {
-          const len = 0.55 + 0.45 * hash(line + 2);
-          const p = frac(t * 0.16) * 1.25 * lines;
-          const reach = p - line; // how far through this line the pen has got
-          const x = u;
-          const word = Math.sin(x * 22 + line * 2.1) > 0.8;
-          const shown = x < len && x < reach * len && !word;
-          const pen = x < len && Math.abs(x - reach * len) < 0.03 && reach > 0 && reach < 1;
-          o[0] = (x * 1.5 - 0.75) * (0.55 + 0.45 * len) * 1.1;
-          o[3] = pen ? 2.4 : 0.9;
-          o[4] = pen ? 1 : shown ? 0.85 : 0;
+      case "converge":
+      case "ripple": {
+        const out = state === "ripple";
+        if (out) {
+          // Speaking, as water. The ball is a still surface; each word lands as a
+          // drop at its own spot, a ring ripple spreads outward from it across
+          // the surface and fades, and drops overlap, so the rings cross and
+          // pass through one another. The surface rises under a crest, which
+          // swells the dots and lights them, and sinks under a trough.
+          const [x, y, z] = ball(0.12, 0.8, 0.95, 0.62);
+          const first = Math.floor(t / 0.72);
+          let lift = 0;
+          let glow = 0;
+          for (let e = Math.max(0, first - 8); e <= first + 3; e++) {
+            const d = dropAt(e);
+            const age = t - d.time;
+            if (age < 0 || age > DROP_LIFE) continue;
+            const ang = Math.acos(Math.min(1, Math.max(-1, x * d.x + y * d.y + z * d.z))); // distance from the drop over the surface
+            const front = d.speed * age;
+            const life = Math.exp(-age / 1.7) * (1 - Math.pow(age / DROP_LIFE, 4));
+            const ring = Math.exp(-Math.pow((ang - front) / (0.26 + 0.14 * front), 2)); // the crest, a little wider as it spreads
+            const wave = Math.cos(7 * (ang - front)) * ring; // crest and trough
+            const splash = Math.exp(-ang * ang / 0.05) * Math.exp(-age / 0.35); // the dent and bounce where it lands
+            lift += d.str * life * (0.1 * wave + 0.12 * splash * Math.cos(9 * age));
+            glow += d.str * life * (1.3 * Math.max(0, wave) * ring + 0.8 * splash);
+          }
+          const gl = Math.min(1, glow);
+          const r = 0.8 * (1 + lift);
+          o[0] = x * r;
+          o[1] = y * r;
+          o[3] = 0.9 + 1.1 * gl;
+          o[4] = 0.45 + 0.55 * gl;
+          break;
         }
-        break;
-      }
-      case "rings":
-      case "lobes": {
-        const k = this.ring[i];
-        const rings = this.rings;
-        const a = this.ringU[i] * TAU + k * 1.1;
-        const lobed = state === "lobes";
-        let r = 0.1 + (k / (rings - 1)) * 0.82;
-        let size = 0.8 + (1 - k / rings) * 0.5;
-        if (lobed) {
-          const env = 0.6 + 0.4 * Math.sin(t * 2.3) * Math.sin(t * 1.3 + 1);
-          const amp = (0.02 + 0.13 * (1 - k / rings)) * env;
-          r *= 1 + amp * Math.sin(5 * a + t * 1.8 - k * 0.45);
-        } else {
-          r *= 1 + 0.02 * Math.sin(t * 2.4 - k * 0.7);
-        }
-        o[0] = Math.cos(a) * r;
-        o[1] = Math.sin(a) * r;
-        o[2] = 0.7;
-        o[3] = size;
-        o[4] = 0.4 + 0.6 * (1 - Math.abs(k / rings - 0.35));
+        // Listening: the ball waits calm and a little dim, and draws in and
+        // brightens as the person speaks, taking the sound in. Each band of
+        // latitude carries a different share of the sound, like a spectrum
+        // wrapped round the ball, so the surface never moves as one piece.
+        const who = 0;
+        const band = Math.min(this.rows - 1, Math.floor((sy * 0.5 + 0.5) * this.rows));
+        const heard = voice(t - 0.12 * hash(band * 5 + who * 3), who);
+        const share = Math.pow(0.5 + 0.5 * Math.sin(band * 1.25 + 1.4 * Math.sin(t * 0.37) + t * 0.6), 1.5);
+        const loud = heard * (0.25 + 0.75 * share);
+        const rough = Math.sin(2.1 * sx + 1.1 * t) * Math.sin(1.9 * sy - 0.9 * t + 1) * Math.sin(2.3 * sz + 0.7 * t);
+        ball(0.14, 0.86 * (1 - 0.26 * loud + 0.04 * heard * rough), 0.92 + 0.35 * loud, 0.58 + 0.34 * loud);
         break;
       }
       case "check": {
